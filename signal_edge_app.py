@@ -46,5 +46,8 @@ if 'strategy_return' in df.columns and not df['strategy_return'].empty:
     sharpe = np.mean(df['strategy_return']) / np.std(df['strategy_return'])
 else:
     sharpe = np.nan  # or 0, or skip displaying Sharpe ratio
+    sharpe = np.mean(df['strategy_return']) / np.std(df['strategy_return'])
+else:
+    sharpe = np.nan  # or 0, or skip displaying Sharpe ratio
 st.metric("Total Strategy Return", f"{total_return:.2%}")
 st.metric("Sharpe Ratio", f"{sharpe:.2f}")
