@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -50,7 +51,11 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file, parse_dates=['date'])
     df.set_index('date', inplace=True)
 else:
-    df = load_live_data()
+    try:
+        df = load_live_data()
+    except Exception as e:
+        st.warning("⚠ Live data unavailable — using sample S&P 500 data.")
+        df = load_sample_data()
 
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
 df = compute_indicators(df, sma_period)
