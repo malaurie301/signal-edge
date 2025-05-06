@@ -25,8 +25,7 @@ st.title("SignalEdge — S&P 500 Signal App")
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
 if uploaded_file:
     df = pd.read_csv(uploaded_file, parse_dates=['date'])
-    df.set_index('date', inplace=True)
-else:
+    df.set_index('date', inplace=Tru
     df = load_data()
 
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
@@ -45,7 +44,7 @@ total_return = df['cumulative_return'].iloc[-1] - 1
 if 'strategy_return' in df.columns and not df['strategy_return'].empty:
     sharpe = np.mean(df['strategy_return']) / np.std(df['strategy_return'])
 
-else:
-    sharpe = np.nan  # or 0, or skip displaying Sharpe ratio
+
+    
 st.metric("Total Strategy Return", f"{total_return:.2%}")
 st.metric("Sharpe Ratio", f"{sharpe:.2f}")
