@@ -29,6 +29,7 @@ if uploaded_file:
     df = load_data()
 
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
+df = load_data()
 df = compute_indicators(df, sma_period)
 
 st.subheader("Price and SMA")
