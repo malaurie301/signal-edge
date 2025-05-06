@@ -25,7 +25,7 @@ st.title("SignalEdge — S&P 500 Signal App")
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
 if uploaded_file:
     df = pd.read_csv(uploaded_file, parse_dates=['date'])
-    df.set_index('date', inplace=Tru
+    df.set_index('date', inplace=True)
     df = load_data()
 
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
