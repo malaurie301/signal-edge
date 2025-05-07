@@ -23,29 +23,36 @@ def compute_indicators(df, sma_period):
 st.title("SignalEdge — S&P 500 Signal App")
 
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
+st.title("SignalEdge — S&P 500 Signal App")
+
+uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
 if uploaded_file:
     df = pd.read_csv(uploaded_file, parse_dates=['date'])
     df.set_index('date', inplace=True)
+else:
     df = load_data()
 
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
-df = load_data()
 df = compute_indicators(df, sma_period)
 
-st.subheader("Price and SMA")
-st.line_chart(df[['close', 'sma']])
+# Layout formatting
+st.markdown("### Strategy Overview")
+col1, col2 = st.columns(2)
+with col1:
+    total_return = df['cumulative_return'].iloc[-1] - 1
+    st.metric("Total Strategy Return", f"{total_return:.2%}")
+with col2:
+    if 'strategy_return' in df.columns and not df['strategy_return'].empty:
+        sharpe = np.mean(df['strategy_return']) / np.std(df['strategy_return'])
+    else:
+        sharpe = np.nan
+    st.metric("Sharpe Ratio", f"{sharpe:.2f}")
 
-st.subheader("Cumulative Strategy Return")
-st.line_chart(df['cumulative_return'])
+st.markdown("### Price Chart with SMA and Buy/Sell Signals")
+chart_data = df[['close', 'sma']].copy()
+st.line_chart(chart_data)
 
-st.subheader("Recent Signals")
-st.write(df[['close', 'sma', 'signal', 'position']].tail(10))
-
-total_return = df['cumulative_return'].iloc[-1] - 1
-if 'strategy_return' in df.columns and not df['strategy_return'].empty:
-    sharpe = np.mean(df['strategy_return']) / np.std(df['strategy_return'])
-
-
-    
-st.metric("Total Strategy Return", f"{total_return:.2%}")
-st.metric("Sharpe Ratio", f"{sharpe:.2f}")
+# Show signals (recent rows)
+st.markdown("### Recent Buy/Sell Signals")
+styled_df = df[['close', 'sma', 'signal', 'position']].tail(10)
+st.dataframe(styled_df.style.highlight_max(axis=0))
