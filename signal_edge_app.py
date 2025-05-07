@@ -22,7 +22,7 @@ def compute_indicators(df, sma_period):
     return df
 st.title("SignalEdge — S&P 500 Signal App")
 
-uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
+
 st.title("SignalEdge — S&P 500 Signal App")
 
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
