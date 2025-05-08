@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 @st.cache_data
 def load_data():
@@ -11,37 +12,33 @@ def load_data():
 def compute_indicators(df, sma_period):
     df['sma'] = df['close'].rolling(sma_period).mean()
     df['signal'] = 0
-    df.loc[df['close'].shift(1) > df['sma'].shift(1), 'signal'] = 1
-    df.loc[df['close'].shift(1) < df['sma'].shift(1), 'signal'] = -1
+    df.loc[df['close'] > df['sma'], 'signal'] = 1
+    df.loc[df['close'] < df['sma'], 'signal'] = -1
     df['position'] = df['signal'].shift(1)
     df['return'] = df['close'].pct_change()
     df['strategy_return'] = df['position'] * df['return']
     df['cumulative_return'] = (1 + df['strategy_return']).cumprod()
     return df
 
+# --- Streamlit layout ---
 st.title("SignalEdge — S&P 500 Signal App")
 
-# Upload CSV file
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
-
 if uploaded_file:
     df = pd.read_csv(uploaded_file, parse_dates=['date'])
     df.set_index('date', inplace=True)
 else:
     df = load_data()
 
-# Select SMA period
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
 df = compute_indicators(df, sma_period)
 
-# Strategy Overview 
+# --- Strategy Overview ---
 st.markdown("### Strategy Overview")
 col1, col2 = st.columns(2)
-
 with col1:
     total_return = df['cumulative_return'].iloc[-1] - 1
     st.metric("Total Strategy Return", f"{total_return:.2%}")
-
 with col2:
     if 'strategy_return' in df.columns and not df['strategy_return'].empty:
         sharpe = np.mean(df['strategy_return']) / np.std(df['strategy_return'])
@@ -49,12 +46,23 @@ with col2:
         sharpe = np.nan
     st.metric("Sharpe Ratio", f"{sharpe:.2f}")
 
-# Price Chart
+# --- Price Chart with Buy/Sell Arrows ---
 st.markdown("### Price Chart with SMA and Buy/Sell Signals")
-chart_data = df[['close', 'sma']].copy()
-st.line_chart(chart_data)
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.plot(df.index, df['close'], label='Close Price')
+ax.plot(df.index, df['sma'], label=f'SMA {sma_period}', linestyle='--')
 
-# Signal Table
+# Plot buy/sell signals
+buys = df[df['signal'] == 1]
+sells = df[df['signal'] == -1]
+ax.plot(buys.index, buys['close'], '^', markersize=8, color='green', label='Buy Signal')
+ax.plot(sells.index, sells['close'], 'v', markersize=8, color='red', label='Sell Signal')
+
+ax.set_ylabel('Price')
+ax.legend()
+st.pyplot(fig)
+
+# --- Signal Table ---
 st.markdown("### Recent Buy/Sell Signals")
 styled_df = df[['close', 'sma', 'signal', 'position']].tail(10)
 st.dataframe(styled_df.style.highlight_max(axis=0))
