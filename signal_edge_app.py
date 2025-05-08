@@ -24,6 +24,7 @@ def compute_indicators(df, sma_period):
 
 
 
+st.title("SignalEdge — S&P 500 Signal App")
 
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
 if uploaded_file:
@@ -48,11 +49,12 @@ with col2:
         sharpe = np.nan
     st.metric("Sharpe Ratio", f"{sharpe:.2f}")
 
+# Chart
 st.markdown("### Price Chart with SMA and Buy/Sell Signals")
 chart_data = df[['close', 'sma']].copy()
 st.line_chart(chart_data)
 
-# Show signals (recent rows)
+# Show signals
 st.markdown("### Recent Buy/Sell Signals")
 styled_df = df[['close', 'sma', 'signal', 'position']].tail(10)
 st.dataframe(styled_df.style.highlight_max(axis=0))
