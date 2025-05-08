@@ -20,10 +20,10 @@ def compute_indicators(df, sma_period):
     df['strategy_return'] = df['position'] * df['return']
     df['cumulative_return'] = (1 + df['strategy_return']).cumprod()
     return df
-st.title("SignalEdge — S&P 500 Signal App")
 
 
-st.title("SignalEdge — S&P 500 Signal App")
+
+
 
 uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=['csv'])
 if uploaded_file:
