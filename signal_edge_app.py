@@ -32,8 +32,8 @@ if uploaded_file:
     df.set_index('date', inplace=True)
 else:
     df = load_data()
-
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
+
 df = compute_indicators(df, sma_period)
 
 # Layout formatting
