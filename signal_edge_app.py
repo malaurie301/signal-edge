@@ -34,7 +34,7 @@ else:
 sma_period = st.slider("Select SMA Period", min_value=10, max_value=200, value=50)
 df = compute_indicators(df, sma_period)
 
-# Strategy Overview
+# Strategy Overview 
 st.markdown("### Strategy Overview")
 col1, col2 = st.columns(2)
 
