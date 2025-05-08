@@ -3,72 +3,78 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import yfinance as yf
 import matplotlib.pyplot as plt
 
-# --- Title and Description ---
-st.title("SignalEdge — S&P 500 Signal App")
-st.markdown("Trend-following + Volatility strategy with optional cash parking and risk metrics.")
+st.set_page_config(layout="wide")
+st.title("SignalEdge — Smarter Market Timing")
 
-# --- File Upload ---
-uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=["csv"])
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    df.columns = [col.lower() for col in df.columns]
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date')
+st.sidebar.header("Strategy Settings")
+sma_period = st.sidebar.slider("SMA Period", 10, 200, 50, step=5)
+min_change = st.sidebar.slider("Min % Price Change (Signal Trigger)", 0.5, 5.0, 1.5)
+min_days_between_signals = st.sidebar.slider("Min Days Between Signals", 5, 30, 10)
+cash_yield = st.sidebar.selectbox("Cash Yield When Out (Annual %)", [1.0, 2.5, 4.0], index=1)
 
-    # --- Parameters ---
-    sma_period = st.slider("Select SMA Period", 5, 200, 50)
-    default_cash_yield = st.selectbox("Select Cash Yield (annualized)", [1.0, 2.5, 4.0, 5.0], index=1)
+@st.cache_data
+def load_data():
+    spy = yf.download("SPY", start="2010-01-01")
+    vix = yf.download("^VIX", start="2010-01-01")
+    df = spy[["Close"]].rename(columns={"Close": "close"})
+    df["vix"] = vix["Close"]
+    df.dropna(inplace=True)
+    return df
 
-    # --- Calculate SMA ---
-    df['sma'] = df['close'].rolling(window=sma_period).mean()
+df = load_data()
+df["sma"] = df["close"].rolling(sma_period).mean()
+df["pct_change"] = df["close"].pct_change(periods=min_days_between_signals).shift(-min_days_between_signals)
+df["signal"] = 0
 
-    # --- Generate Signals ---
-    df['signal'] = 0
-    df.loc[df['close'] > df['sma'], 'signal'] = 1
-    df.loc[df['close'] < df['sma'], 'signal'] = -1
+last_signal_day = -min_days_between_signals
+for i in range(1, len(df)):
+    if i - last_signal_day < min_days_between_signals:
+        continue
+    upward = df["close"].iloc[i] > df["sma"].iloc[i]
+    down_from_below = df["close"].iloc[i-1] <= df["sma"].iloc[i-1]
+    if upward and down_from_below and df["pct_change"].iloc[i] > min_change / 100:
+        df.loc[df.index[i], "signal"] = 1
+        last_signal_day = i
+    elif df["close"].iloc[i] < df["sma"].iloc[i] and df["close"].iloc[i-1] >= df["sma"].iloc[i-1]:
+        df.loc[df.index[i], "signal"] = -1
+        last_signal_day = i
 
-    # --- Simulate Position ---
-    df['position'] = df['signal'].replace(to_replace=0, method='ffill')
-    df['position'].fillna(0, inplace=True)
+df["position"] = df["signal"].replace(to_replace=0, method="ffill").fillna(0)
+df["daily_return"] = df["close"].pct_change()
+daily_cash_rate = (1 + cash_yield / 100) ** (1/252) - 1
+df["strategy_return"] = np.where(df["position"].shift(1) == 1, df["daily_return"], daily_cash_rate)
+df["cumulative_strategy"] = (1 + df["strategy_return"]).cumprod()
+df["cumulative_market"] = (1 + df["daily_return"].fillna(0)).cumprod()
 
-    # --- Daily Returns & Cash Logic ---
-    df['daily_return'] = df['close'].pct_change()
-    df['strategy_return'] = df['position'].shift(1) * df['daily_return']
-    cash_rate_daily = (1 + default_cash_yield / 100) ** (1 / 252) - 1
-    df['strategy_return'] = np.where(df['position'].shift(1) == 0, cash_rate_daily, df['strategy_return'])
-    df['cumulative_return'] = (1 + df['strategy_return']).cumprod()
+total_return = df["cumulative_strategy"].iloc[-1] - 1
+market_return = df["cumulative_market"].iloc[-1] - 1
+drawdown = (df["cumulative_strategy"].cummax() - df["cumulative_strategy"]).max()
+sharpe = df["strategy_return"].mean() / df["strategy_return"].std() * np.sqrt(252)
 
-    # --- Metrics ---
-    total_return = df['cumulative_return'].iloc[-1] - 1
-    annualized_return = (df['cumulative_return'].iloc[-1]) ** (252 / len(df)) - 1
-    max_drawdown = ((df['cumulative_return'].cummax() - df['cumulative_return']) / df['cumulative_return'].cummax()).max()
-    annual_volatility = df['strategy_return'].std() * np.sqrt(252)
-    sharpe_ratio = (annualized_return - 0.01) / annual_volatility if annual_volatility > 0 else np.nan
+st.subheader("Performance Overview")
+col1, col2, col3 = st.columns(3)
+col1.metric("Strategy Return", f"{total_return:.2%}")
+col2.metric("Max Drawdown", f"{drawdown:.2%}")
+col3.metric("Sharpe Ratio", f"{sharpe:.2f}" if not np.isnan(sharpe) else "N/A")
 
-    # --- Output ---
-    st.subheader("Strategy Overview")
-    st.metric("Total Strategy Return", f"{total_return:.2%}")
-    st.metric("Annualized Return", f"{annualized_return:.2%}")
-    st.metric("Max Drawdown", f"{max_drawdown:.2%}")
-    st.metric("Annual Volatility", f"{annual_volatility:.2%}")
-    st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+st.subheader("Signal Chart with SMA")
+fig, ax = plt.subplots(figsize=(12,5))
+ax.plot(df.index, df["close"], label="Close Price", alpha=0.7)
+ax.plot(df.index, df["sma"], label=f"SMA {sma_period}", linestyle="--")
+ax.scatter(df[df["signal"] == 1].index, df[df["signal"] == 1]["close"], marker="^", color="green", label="Buy Signal")
+ax.scatter(df[df["signal"] == -1].index, df[df["signal"] == -1]["close"], marker="v", color="red", label="Sell Signal")
+ax.legend()
+st.pyplot(fig)
 
-    # --- Chart ---
-    fig, ax = plt.subplots()
-    ax.plot(df['date'], df['close'], label="Close Price")
-    ax.plot(df['date'], df['sma'], label=f"SMA {sma_period}", linestyle="--")
-    ax.scatter(df[df['signal'] == 1]['date'], df[df['signal'] == 1]['close'], marker="^", color="green", label="Buy Signal")
-    ax.scatter(df[df['signal'] == -1]['date'], df[df['signal'] == -1]['close'], marker="v", color="red", label="Sell Signal")
-    ax.legend()
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Price")
-    st.pyplot(fig)
+st.subheader("Cumulative Return: Strategy vs. Market")
+fig2, ax2 = plt.subplots()
+ax2.plot(df.index, df["cumulative_strategy"], label="SignalEdge Strategy")
+ax2.plot(df.index, df["cumulative_market"], label="S&P 500 Buy & Hold", linestyle="--")
+ax2.legend()
+st.pyplot(fig2)
 
-    # --- Show Data Table ---
-    st.subheader("Recent Buy/Sell Signals")
-    st.dataframe(df[['date', 'close', 'sma', 'signal', 'position']].tail(30))
-
-else:
-    st.info("Please upload a CSV file with at least 'date' and 'close' columns.")
+st.subheader("Recent Signals")
+st.dataframe(df[["close", "sma", "vix", "signal", "position"]].tail(25).reset_index())
