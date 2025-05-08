@@ -1,79 +1,74 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import yfinance as yf
 import matplotlib.pyplot as plt
+from datetime import datetime
 
-# App title and placeholder logo
-st.set_page_config(layout="centered")
+st.set_page_config(layout="wide")
 st.title("SignalEdge — S&P 500 Signal App")
 
-# Optional artwork (placeholder)
-st.image("https://via.placeholder.com/728x90.png?text=SignalEdge+Logo", use_column_width=True)
+# Sidebar Inputs
+st.sidebar.header("Upload your price data (CSV with 'date' and 'close')")
+uploaded_file = st.sidebar.file_uploader("Upload CSV", type="csv")
+default_symbol = "^GSPC"
 
-# Load default data if no file uploaded
-@st.cache_data
+sma_period = st.sidebar.slider("Select SMA Period", 5, 200, 30)
+cash_yield = st.sidebar.selectbox("Cash Yield (Annual)", [1.0, 2.5, 4.0, 5.0], index=1)
+
 def load_data():
-    df = pd.read_csv("sp500.csv", parse_dates=["date"])
-    df.set_index("date", inplace=True)
+    df = yf.download(default_symbol, start="2022-01-01", end=datetime.today())
+    df = df[['Close']].reset_index()
+    df.columns = ['date', 'close']
     return df
 
-# Calculate indicators and signals
-def compute_indicators(df, sma_period):
-    df["sma"] = df["close"].rolling(sma_period).mean()
-    df["signal"] = 0
-    df.loc[df["close"].shift(1) > df["sma"].shift(1), "signal"] = 1
-    df.loc[df["close"].shift(1) < df["sma"].shift(1), "signal"] = -1
-    df["position"] = df["signal"].shift(1)
-    df["return"] = df["close"].pct_change()
-    df["strategy_return"] = df["position"] * df["return"]
-    df["cumulative_return"] = (1 + df["strategy_return"]).cumprod()
-    return df
-
-# Upload or load data
-uploaded_file = st.file_uploader("Upload your price data (CSV with 'date' and 'close')", type=["csv"])
-if uploaded_file:
-    df = pd.read_csv(uploaded_file, parse_dates=["date"])
-    df.set_index("date", inplace=True)
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file, parse_dates=['date'])
 else:
     df = load_data()
 
-# SMA slider and calculation
-sma_period = st.slider("Select SMA Period", min_value=5, max_value=200, value=50)
-df = compute_indicators(df, sma_period)
+df['sma'] = df['close'].rolling(window=sma_period).mean()
 
-# Strategy Overview
-st.markdown("### Strategy Overview")
-col1, col2 = st.columns(2)
+df['signal'] = 0
+df['position'] = 0
 
-with col1:
-    total_return = df["cumulative_return"].iloc[-1] - 1 if "cumulative_return" in df.columns else 0
-    st.metric("Total Strategy Return", f"{total_return:.2%}")
+for i in range(1, len(df)):
+    if df['close'][i] > df['sma'][i] and df['close'][i-1] <= df['sma'][i-1]:
+        df.loc[i, 'signal'] = 1  # Buy
+    elif df['close'][i] < df['sma'][i] and df['close'][i-1] >= df['sma'][i-1]:
+        df.loc[i, 'signal'] = -1  # Sell
 
-with col2:
-    if "strategy_return" in df.columns and not df["strategy_return"].empty:
-        sharpe = np.mean(df["strategy_return"]) / np.std(df["strategy_return"])
-    else:
-        sharpe = np.nan
-    st.metric("Sharpe Ratio", f"{sharpe:.2f}")
+df['position'] = df['signal'].replace(0, method='ffill').fillna(0)
 
-# Chart with buy/sell arrows
-st.markdown("### Price Chart with SMA and Buy/Sell Signals")
+# Strategy return calculation
+df['market_return'] = df['close'].pct_change()
+df['strategy_return'] = df['market_return'] * df['position'].shift(1).fillna(0)
+daily_cash_return = (1 + cash_yield / 100) ** (1/252) - 1
+df['cash_return'] = np.where(df['position'].shift(1) == 0, daily_cash_return, 0)
+df['combined_return'] = df['strategy_return'] + df['cash_return']
+df['equity_curve'] = (1 + df['combined_return']).cumprod()
+
+# Metrics
+total_return = (df['equity_curve'].iloc[-1] - 1) * 100
+sharpe_ratio = df['combined_return'].mean() / df['combined_return'].std() * np.sqrt(252)
+
+# Chart
 fig, ax = plt.subplots()
-ax.plot(df.index, df["close"], label="Close Price", linewidth=1.5)
-ax.plot(df.index, df["sma"], label=f"SMA {sma_period}", linestyle="--")
-
-buy_signals = df[df["signal"] == 1]
-sell_signals = df[df["signal"] == -1]
-ax.scatter(buy_signals.index, buy_signals["close"], label="Buy Signal", color="green", marker="^", s=100)
-ax.scatter(sell_signals.index, sell_signals["close"], label="Sell Signal", color="red", marker="v", s=100)
-
+ax.plot(df['date'], df['close'], label="Close Price", linewidth=1)
+ax.plot(df['date'], df['sma'], label=f"SMA {sma_period}", linestyle="--")
+ax.scatter(df.loc[df['signal'] == 1, 'date'], df.loc[df['signal'] == 1, 'close'], label='Buy Signal', marker='^', color='green')
+ax.scatter(df.loc[df['signal'] == -1, 'date'], df.loc[df['signal'] == -1, 'close'], label='Sell Signal', marker='v', color='red')
+ax.legend()
 ax.set_xlabel("Date")
 ax.set_ylabel("Price")
-ax.legend()
-ax.grid(True)
+ax.set_title("Price Chart with SMA and Buy/Sell Signals")
 st.pyplot(fig)
 
 # Signal Table
-st.markdown("### Recent Buy/Sell Signals")
-styled_df = df[["close", "sma", "signal", "position"]].tail(10)
-st.dataframe(styled_df.style.highlight_max(axis=0))
+st.subheader("Recent Buy/Sell Signals")
+st.dataframe(df[['date', 'close', 'sma', 'signal', 'position']].tail(10).style.highlight_max(axis=0))
+
+# Strategy Metrics
+st.subheader("Strategy Overview")
+st.metric(label="Total Strategy Return", value=f"{total_return:.2f}%")
+st.metric(label="Sharpe Ratio", value=f"{sharpe_ratio:.2f}")
