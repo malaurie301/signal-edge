@@ -34,7 +34,9 @@ if df is not None:
 
     df['sma'] = df['close'].rolling(window=sma_period).mean()
     df['signal'] = 0
-    df['signal'][sma_period:] = np.where(df['close'][sma_period:] > df['sma'][sma_period:], 1, -1)
+    df.loc[df.index[sma_period:], 'signal'] = np.where(
+    df['close'][sma_period:] > df['sma'][sma_period:], 1, -1
+)
     df['position'] = df['signal'].shift(1)
     df.dropna(inplace=True)
 
