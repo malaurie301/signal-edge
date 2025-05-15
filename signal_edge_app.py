@@ -33,7 +33,7 @@ if df is not None:
     cash_yield = st.number_input("Select Cash Yield (annualized)", min_value=0.0, max_value=10.0, value=2.5)
 
     df['sma'] = df['close'].rolling(window=sma_period).mean()
-    df['signal'] = 0
+    df['signal'] = np.nan
     df.loc[df.index[sma_period:], 'signal'] = np.where(
     df['close'][sma_period:] > df['sma'][sma_period:], 1, -1
 )
