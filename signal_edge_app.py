@@ -32,16 +32,16 @@ if df is not None:
     sma_period = st.slider("Select SMA Period", 5, 200, 50)
     cash_yield = st.number_input("Select Cash Yield (annualized)", min_value=0.0, max_value=10.0, value=2.5)
 
-35: df['sma'] = df['close'].rolling(window=sma_period).mean()
+df['sma'] = df['close'].rolling(window=sma_period).mean()
 
-36: df['signal'] = np.nan
-37: valid_idx = df.index[sma_period:]
-38: df.loc[valid_idx, 'signal'] = np.where(
-39:     df.loc[valid_idx, 'close'] > df.loc[valid_idx, 'sma'], 1, -1
-40: )
+df['signal'] = np.nan
+ valid_idx = df.index[sma_period:]
+df.loc[valid_idx, 'signal'] = np.where(
+   df.loc[valid_idx, 'close'] > df.loc[valid_idx, 'sma'], 1, -1
+)
 
-41: df['position'] = df['signal'].shift(1)
-42: df.dropna(inplace=True)
+df['position'] = df['signal'].shift(1)
+df.dropna(inplace=True)
     
 
 
